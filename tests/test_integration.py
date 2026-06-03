@@ -3,8 +3,14 @@ import time
 
 from tests.conftest import make_client, recv_all
 
-# Pruebas de integración - Múltiples conexiones
+# ============================================================================
+# PRUEBAS DE INTEGRACION - Validar interaccion entre multiples componentes
+# ============================================================================
+# Las pruebas de integracion verifican que diferentes modulos funcionan
+# correctamente juntos: servidor, clientes, mensajes y comunicacion.
 
+# --- SECCION: Multiples Conexiones ---
+# Valida que varios clientes pueden conectarse y comunicarse simultaneamente
 def test_two_clients_connect(running_server):
     host, port = running_server
     client1 = make_client(host, port, "Alice")
@@ -55,6 +61,9 @@ def test_broadcast_to_three_clients(running_server):
     client2.close()
     client3.close()
 
+# --- SECCION: Mensajes Simultaneos ---
+# Verifica que los mensajes se reciben correctamente cuando se envian en paralelo
+# y que se mantiene el orden de llegada
 def test_simultaneous_messages_without_loss(running_server):
     host, port = running_server
     client1 = make_client(host, port, "Alice")
@@ -118,6 +127,9 @@ def test_message_order(running_server):
     client1.close()
     client2.close()
 
+# --- SECCION: Validacion de Mensajes ---
+# Verifica que el servidor rechaza mensajes invalidos (vacios o muy largos)
+# como parte de la integracion del sistema de validacion
 def test_empty_message_rejected(running_server):
     host, port = running_server
     client1 = make_client(host, port, "Alice")
