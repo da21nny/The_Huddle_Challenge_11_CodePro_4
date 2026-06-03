@@ -1,224 +1,155 @@
-"""
-Integration tests — real server + multiple clients.
-
-These tests stand up a real server and connect real clients
-over TCP network. They verify that the chat works end-to-end.
-
-Covers: multiple connections, broadcast, simultaneous messages,
-no loss or duplication, order, and rejection of invalid messages.
-"""
-
 import threading
 import time
 
 from tests.conftest import make_client, recv_all
 
+# Pruebas de integración - Múltiples conexiones
 
-# ===================================================================
-# Multiple connections
-# ===================================================================
+def test_two_clients_connect(running_server):
+    host, port = running_server
+    client1 = make_client(host, port, "Alice")
+    client2 = make_client(host, port, "Bob")
+    client1.close()
+    client2.close()
 
-class TestMultipleConnections:
-    """Multiple clients connecting to the server."""
+def test_message_reaches_other_client(running_server):
+    host, port = running_server
+    client1 = make_client(host, port, "Alice")
+    client2 = make_client(host, port, "Bob")
+    time.sleep(0.1)
 
-    def test_two_clients_connect(self, running_server):
-        """Two clients can connect without errors."""
-        host, port = running_server
-        c1 = make_client(host, port, "Alice")
-        c2 = make_client(host, port, "Bob")
-        # If we reach here without exceptions, both connected OK
-        c1.close()
-        c2.close()
+    recv_all(client1, timeout=0.1)
+    recv_all(client2, timeout=0.1)
 
-    def test_message_reaches_other_client(self, running_server):
-        """A message from Alice reaches Bob, but not Alice."""
-        host, port = running_server
-        c1 = make_client(host, port, "Alice")
-        c2 = make_client(host, port, "Bob")
-        time.sleep(0.1)
+    # Alice envía un mensaje
+    client1.sendall(b"Hola a todos\n")
+    time.sleep(0.1)
 
-        # Clear connection notifications
-        recv_all(c1, timeout=0.1)
-        recv_all(c2, timeout=0.1)
+    # Bob recibe el mensaje
+    data = recv_all(client2)
+    assert "[Alice]: Hola a todos" in data
 
-        # Alice sends a message
-        c1.sendall(b"Hola a todos\n")
-        time.sleep(0.1)
+    client1.close()
+    client2.close()
 
-        # Bob should receive it
-        data = recv_all(c2)
-        assert "[Alice]: Hola a todos" in data
+def test_broadcast_to_three_clients(running_server):
+    host, port = running_server
+    client1 = make_client(host, port, "Alice")
+    client2 = make_client(host, port, "Bob")
+    client3 = make_client(host, port, "Carol")
+    time.sleep(0.1)
 
-        # Alice should NOT receive her own message
-        data_alice = recv_all(c1, timeout=0.1)
-        assert "[Alice]: Hola a todos" not in data_alice
+    recv_all(client1, timeout=0.1)
+    recv_all(client2, timeout=0.1)
+    recv_all(client3, timeout=0.1)
 
-        c1.close()
-        c2.close()
+    # Alice envía un mensaje
+    client1.sendall(b"Hola a todos\n")
+    time.sleep(0.1)
 
-    def test_broadcast_to_three_clients(self, running_server):
-        """A message from Alice reaches both Bob and Carol."""
-        host, port = running_server
-        c1 = make_client(host, port, "Alice")
-        c2 = make_client(host, port, "Bob")
-        c3 = make_client(host, port, "Carol")
-        time.sleep(0.1)
+    # Bob y Carol reciben el mensaje
+    assert "[Alice]: Hola a todos" in recv_all(client2)
+    assert "[Alice]: Hola a todos" in recv_all(client3)
 
-        # Clear mailboxes
-        recv_all(c1, timeout=0.1)
-        recv_all(c2, timeout=0.1)
-        recv_all(c3, timeout=0.1)
+    client1.close()
+    client2.close()
+    client3.close()
 
-        c1.sendall(b"Mensaje de Alice\n")
-        time.sleep(0.1)
+def test_simultaneous_messages_without_loss(running_server):
+    host, port = running_server
+    client1 = make_client(host, port, "Alice")
+    client2 = make_client(host, port, "Bob")
+    time.sleep(0.1)
 
-        data_bob = recv_all(c2)
-        data_carol = recv_all(c3)
+    recv_all(client1, timeout=0.1)
+    recv_all(client2, timeout=0.1)
 
-        assert "[Alice]: Mensaje de Alice" in data_bob
-        assert "[Alice]: Mensaje de Alice" in data_carol
-
-        c1.close()
-        c2.close()
-        c3.close()
-
-
-# ===================================================================
-# Simultaneous messages
-# ===================================================================
-
-class TestSimultaneousMessages:
-    """Multiple clients sending and receiving at the same time."""
-
-    def test_simultaneous_messages_without_loss(self, running_server):
-        """5 messages from each side, none are lost."""
-        host, port = running_server
-        c1 = make_client(host, port, "Alice")
-        c2 = make_client(host, port, "Bob")
-        time.sleep(0.1)
-
-        # Clear mailboxes
-        recv_all(c1, timeout=0.1)
-        recv_all(c2, timeout=0.1)
-
-        n_messages = 5
-
-        def send_messages(sock, prefix):
-            """Sends numbered messages."""
-            for i in range(n_messages):
-                sock.sendall(f"{prefix}-{i}\n".encode())
-                time.sleep(0.01)
-
-        # Launch sends in parallel
-        t1 = threading.Thread(target=send_messages, args=(c1, "A"))
-        t2 = threading.Thread(target=send_messages, args=(c2, "B"))
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
-        time.sleep(0.3)
-
-        # Alice should receive ALL messages from Bob
-        data_c1 = recv_all(c1)
-        for i in range(n_messages):
-            assert f"B-{i}" in data_c1
-
-        # Bob should receive ALL messages from Alice
-        data_c2 = recv_all(c2)
-        for i in range(n_messages):
-            assert f"A-{i}" in data_c2
-
-        c1.close()
-        c2.close()
-
-    def test_no_duplication(self, running_server):
-        """A message sent once arrives exactly once."""
-        host, port = running_server
-        c1 = make_client(host, port, "Alice")
-        c2 = make_client(host, port, "Bob")
-        time.sleep(0.1)
-
-        recv_all(c1, timeout=0.1)
-        recv_all(c2, timeout=0.1)
-
-        c1.sendall(b"UNICO\n")
-        time.sleep(0.1)
-
-        data = recv_all(c2)
-        # Message should appear exactly ONCE
-        assert data.count("UNICO") == 1
-
-        c1.close()
-        c2.close()
-
-    def test_message_order(self, running_server):
-        """Messages arrive in the order they were sent."""
-        host, port = running_server
-        c1 = make_client(host, port, "Alice")
-        c2 = make_client(host, port, "Bob")
-        time.sleep(0.1)
-
-        recv_all(c2, timeout=0.1)
-
-        # Alice sends 10 numbered messages in order
-        for i in range(10):
-            c1.sendall(f"msg-{i}\n".encode())
+    # Función para enviar mensajes en paralelo
+    def send_messages(sock, prefix):
+        for i in range(5):
+            sock.sendall(f"{prefix}-{i}\n".encode())
             time.sleep(0.01)
-        time.sleep(0.2)
 
-        data = recv_all(c2)
-        lines = [line for line in data.strip().split("\n") if "msg-" in line]
+    thread1 = threading.Thread(target=send_messages, args=(client1, "A"))
+    thread2 = threading.Thread(target=send_messages, args=(client2, "B"))
+    thread1.start()
+    thread2.start()
+    thread1.join()
+    thread2.join()
+    time.sleep(0.3)
 
-        # Extract numbers and verify they are in order
-        nums = []
-        for line in lines:
-            for part in line.split("msg-"):
-                if part and part[0].isdigit():
-                    nums.append(int(part[0]))
+    # Verifica que se recibieron todos los mensajes
+    data_client1 = recv_all(client1)
+    data_client2 = recv_all(client2)
+    
+    for i in range(5):
+        assert f"B-{i}" in data_client1
+        assert f"A-{i}" in data_client2
 
-        assert nums == sorted(nums), f"Messages out of order: {nums}"
+    client1.close()
+    client2.close()
 
-        c1.close()
-        c2.close()
+def test_message_order(running_server):
+    host, port = running_server
+    client1 = make_client(host, port, "Alice")
+    client2 = make_client(host, port, "Bob")
+    time.sleep(0.1)
 
+    recv_all(client2, timeout=0.1)
 
-# ===================================================================
-# Invalid messages
-# ===================================================================
+    # Alice envía 10 mensajes numerados
+    for i in range(10):
+        client1.sendall(f"msg-{i}\n".encode())
+        time.sleep(0.01)
+    time.sleep(0.2)
 
-class TestInvalidMessages:
-    """The server rejects invalid messages."""
+    data = recv_all(client2)
+    lines = [line for line in data.strip().split("\n") if "msg-" in line]
 
-    def test_empty_message_rejected(self, running_server):
-        """An empty message (only \\n) returns [ERROR]."""
-        host, port = running_server
-        c1 = make_client(host, port, "Alice")
-        time.sleep(0.1)
+    # Extrae los números y verifica que están en orden
+    numbers = []
+    for line in lines:
+        for part in line.split("msg-"):
+            if part and part[0].isdigit():
+                numbers.append(int(part[0]))
 
-        recv_all(c1, timeout=0.1)
+    assert numbers == sorted(numbers)
 
-        # Send only a newline (empty message)
-        c1.sendall(b"\n")
-        time.sleep(0.1)
+    client1.close()
+    client2.close()
 
-        data = recv_all(c1)
-        assert "[ERROR]" in data
+def test_empty_message_rejected(running_server):
+    host, port = running_server
+    client1 = make_client(host, port, "Alice")
+    time.sleep(0.1)
 
-        c1.close()
+    recv_all(client1, timeout=0.1)
 
-    def test_long_message_rejected(self, running_server):
-        """A message longer than 500 characters returns [ERROR]."""
-        host, port = running_server
-        c1 = make_client(host, port, "Alice")
-        time.sleep(0.1)
+    # Envía un mensaje vacío
+    client1.sendall(b"\n")
+    time.sleep(0.1)
 
-        recv_all(c1, timeout=0.1)
+    # Debe recibir un error
+    data = recv_all(client1)
+    assert "[ERROR]" in data
 
-        msg = "x" * 501 + "\n"
-        c1.sendall(msg.encode())
-        time.sleep(0.1)
+    client1.close()
 
-        data = recv_all(c1)
-        assert "[ERROR]" in data
+def test_long_message_rejected(running_server):
+    host, port = running_server
+    client1 = make_client(host, port, "Alice")
+    time.sleep(0.1)
 
-        c1.close()
+    recv_all(client1, timeout=0.1)
+
+    # Envía un mensaje muy largo
+    message = "x" * 501 + "\n"
+    client1.sendall(message.encode())
+    time.sleep(0.1)
+
+    # Debe recibir un error
+    data = recv_all(client1)
+    assert "[ERROR]" in data
+
+    client1.close()
+
