@@ -10,7 +10,14 @@ from src.server import (
     check_message,
 )
 
-# Pruebas unitarias para check_message
+# ============================================================================
+# PRUEBAS UNITARIAS - Validacion de funciones criticas de forma aislada
+# ============================================================================
+# Las pruebas unitarias verifican comportamientos especificos de funciones
+# individuales, sin depender de otras partes del sistema.
+
+# --- FUNCION: check_message ---
+# Casos Positivos (Happy Path): El sistema funciona bajo condiciones ideales
 def test_valid_message():
     ok, reason = check_message("Hola mundo")
     assert ok is True
@@ -20,6 +27,7 @@ def test_message_at_exact_limit():
     ok, reason = check_message("a" * MAX_MESSAGE_LENGTH)
     assert ok is True
 
+# Casos Negativos: El sistema maneja entradas incorrectas o excepcionales
 def test_empty_message():
     ok, reason = check_message("")
     assert ok is False
@@ -38,7 +46,8 @@ def test_message_too_long():
     assert ok is False
     assert "excede" in reason
 
-# Pruebas unitarias para broadcast
+# --- FUNCION: broadcast ---
+# Verifica que los mensajes se distribuyen correctamente a multiples clientes
 def test_broadcast_sends_to_others_not_sender():
     sender = MagicMock(spec=socket.socket)
     receiver1 = MagicMock(spec=socket.socket)
@@ -77,7 +86,8 @@ def test_broadcast_broken_socket_no_crash():
     broadcast("test", sender=None)
     assert good_socket.sendall.call_count >= 1
 
-# Pruebas unitarias para remove_client
+# --- FUNCION: remove_client ---
+# Verifica que la eliminacion de clientes se realiza correctamente
 def test_remove_client_from_dict():
     client_socket = MagicMock(spec=socket.socket)
     with clients_lock:

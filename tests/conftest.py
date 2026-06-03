@@ -6,16 +6,22 @@ import pytest
 
 from src.server import accept_loop, clients, clients_lock, start_server
 
-# Fixture: limpiar la agenda antes y después de cada test
+# ============================================================================
+# CONFIGURACION CENTRALIZADA DE PYTEST (conftest.py)
+# ============================================================================
+# Este archivo contiene fixtures y funciones auxiliares reutilizables
+# por todas las pruebas unitarias, de integracion y de desconexion.
+
+# FIXTURE: Limpieza automatica de clientes antes y despues de cada test
 @pytest.fixture(autouse=True)
 def _clear_clients():
     # ANTES del test: limpiar
     with clients_lock:
         clients.clear()
 
-    yield  # --- aquí se ejecuta el test ---
+    yield  # --- aqui se ejecuta el test ---
 
-    # DESPUÉS del test: cerrar sockets y limpiar
+    # DESPUES del test: cerrar sockets y limpiar
     with clients_lock:
         for sock in list(clients):
             try:
@@ -25,7 +31,7 @@ def _clear_clients():
         clients.clear()
 
 
-# Fixture: levantar un servidor de prueba 
+# FIXTURE: Levantar un servidor de prueba con puerto automatico
 @pytest.fixture()
 def running_server():
     # Crear servidor con port=0 (el SO elige un puerto libre)
@@ -43,7 +49,7 @@ def running_server():
     time.sleep(0.1)  # dar tiempo a que los hilos daemon terminen
 
 
-# Función auxiliar: crear un cliente de prueba
+# FUNCION AUXILIAR: Crear un cliente de prueba
 def make_client(host, port, nickname):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((host, port))
@@ -51,7 +57,7 @@ def make_client(host, port, nickname):
     time.sleep(0.05)  # dar tiempo al servidor a registrar
     return sock
 
-# Función auxiliar: leer todo lo que llegó por el socket
+# FUNCION AUXILIAR: Leer todos los datos disponibles del socket
 def recv_all(sock, timeout=0.3):
     sock.settimeout(timeout)
     chunks = []
