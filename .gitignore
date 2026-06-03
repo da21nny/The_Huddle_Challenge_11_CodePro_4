@@ -1,0 +1,12 @@
+__pycache__
+.env
+.venv
+.vscode
+.history
+.pytest_cache
+__init__.pyc
+__init__.py
+*.pyc
+*.pyo
+*.pyd
+*.pyc
