@@ -2,8 +2,14 @@ import time
 from tests.conftest import make_client, recv_all
 from src.server import clients, clients_lock
 
-# Pruebas de desconexión abrupta
+# ============================================================================
+# PRUEBAS DE DESCONEXION - Manejo de desconexiones inesperadas y errores
+# ============================================================================
+# Valida que el servidor maneja correctamente la desconexion de clientes
+# sin bloquearse o causar errores, manteniendo otros clientes activos.
 
+# --- SECCION: Desconexion Abrupta ---
+# Pruebas de desconexion de uno o mas clientes y recuperacion del servidor
 def test_server_keeps_running(running_server):
     host, port = running_server
     client1 = make_client(host, port, "Alice")
@@ -68,6 +74,9 @@ def test_clients_dict_updates(running_server):
 
     client2.close()
 
+# --- SECCION: Desconexion Multiple ---
+# Verifica el comportamiento cuando multiples clientes se desconectan
+# y el servidor continua funcionando
 def test_three_of_five_disconnect(running_server):
     host, port = running_server
     connections = []
@@ -128,6 +137,9 @@ def test_all_disconnect_server_survives(running_server):
 
     new_client.close()
 
+# --- SECCION: Desconexion Durante Envio ---
+# Valida que los mensajes se envian correctamente incluso cuando
+# otro cliente se desconecta al mismo tiempo
 def test_message_while_another_disconnects(running_server):
     host, port = running_server
     client1 = make_client(host, port, "Alice")
